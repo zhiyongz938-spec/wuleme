@@ -1,5 +1,5 @@
 // GitHub Pages 版：浏览器直连 DeepSeek API
-const DS_KEY = "undefined";
+const DS_KEY = "sk-5b471cd9a84d4671b3eb4534097c50ce";
 async function aiAsk(system, user) {
   const r = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -8,7 +8,7 @@ async function aiAsk(system, user) {
       model: "deepseek-v4-flash",
       messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: user }],
       temperature: 0.75,
-      max_tokens: 500,
+      max_tokens: 350,
       thinking: { type: "disabled" },
     }),
     signal: AbortSignal.timeout(85000),
