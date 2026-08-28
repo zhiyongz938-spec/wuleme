@@ -14,7 +14,7 @@ async function aiAsk(system, user) {
     signal: AbortSignal.timeout(85000),
   });
   const j = await r.json();
-  if (!j.ok) throw new Error(j.error?.message || "AI 解析失败");
+  if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
   return j.choices?.[0]?.message?.content || "";
 }
 
