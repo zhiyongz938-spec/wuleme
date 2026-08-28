@@ -666,7 +666,7 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
 <script src="liuyao.js?v=9"></script>
 <script src="tarot.js?v=9"></script>
 <script src="ai.js?v=9"></script>
-<script src="local.js?v=9"></script>
+<script src="offline.js?v=9"></script>
 <script>
 /* ============ 标语 ============ */
 const SLOGANS=[
@@ -881,34 +881,51 @@ function finishYao(coins){
   window._yaoDesc=desc;
 }
 
-/* 深度解读：3~5 秒整篇呈现，离线本地兜底 */
-async function deepAsk(system, user, box, headIcon, headText, retryFn){
+/* 深度解读：在线 AI（8秒超时）→ 失败自动降级内置离线解读 */
+async function deepAsk(system, user, box, headIcon, headText, retryFn, toolType){
   if(!box) return;
-  const useLocal = (localStorage.getItem("wlm_engine") === "local");
-  if(useLocal){
-    if(!localReady && !localLoading){
-      showLoading(box, "正在加载本地引擎（首次约 1~3 分钟，之后秒开）…");
-      await initLocalModel();
-    }
-    if(localReady){
-      showLoading(box, "本地引擎深度解读中…");
-      try{
-        const text = await localAsk(system, user);
-        if(text){
-          box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">"+headIcon+" "+headText+"<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">📴 本地离线</span></div><div class=\"ai-body\">"+mdRender(text)+"</div></div>";
-          return;
-        }
-      }catch(e){ console.warn("本地生成失败:", e.message); }
-    }
-  }
-  // 在线：等待 3~5 秒，整篇呈现
   showLoading(box, "正在深度解读…（约 3~5 秒）");
   try{
     const text = await aiAsk(system, user);
     box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">"+headIcon+" "+headText+"<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线</span></div><div class=\"ai-body\">"+mdRender(text)+"</div></div>";
+    return;
   }catch(e){
-    box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">⚠ 解读失败</div><div class=\"ai-body\">"+e.message+"（可能是网络问题，请重试）</div></div><div class=\"ai-retry\"><button class=\"btn-gold\" onclick=\""+retryFn+"()\">重试</button></div>";
+    console.warn("在线解读失败，切换内置解读:", e.message);
   }
+  // 离线降级：内置解读库，保证一定有答案（加固版）
+  let offline = null;
+  try{
+    const tt = String(toolType || '');
+    const g = window.lastYaoResult || lastYaoResult || null;
+    const qt = window.currentQType || currentQType || '其他';
+    const tc = window.lastTarotCards || null;
+    const br = window._baziResult || null;
+    if(tt.indexOf('yao') >= 0 && g && g.gua){
+      offline = offlineLiuyao(g.gua.guaName, qt, g.gua.bianGuaName);
+    } else if(tt.indexOf('tarot') >= 0 && tc && tc.length){
+      offline = offlineTarot(tc, qt);
+    } else if(tt.indexOf('bazi') >= 0 && br){
+      offline = offlineBazi(br, window._baziQType || '其他');
+    }
+  }catch(e2){ console.warn("内置解读失败:", e2.message); }
+  if(offline){
+    box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">"+headIcon+" "+headText+"<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">📴 内置解读</span></div><div class=\"ai-body\">"+mdRender(offline)+"</div></div>";
+  }else{
+    box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">⚠ 解读暂时不可用</div><div class=\"ai-body\">网络连接不稳定，请稍后重试。</div></div><div class=\"ai-retry\"><button class=\"btn-gold\" onclick=\""+retryFn+"()\">重试</button></div>";
+  }
+}
+
+/* 引擎切换（保留 UI，公网版始终在线优先） */
+function toggleEngine(){
+  localStorage.setItem("wlm_engine", "cloud");
+  document.querySelectorAll(".engine-btn").forEach(b=>b.classList.toggle("on", b.dataset.mode==="cloud"));
+  const st = document.getElementById("engineState");
+  if(st) st.textContent = "在线模式：优先 AI，失败自动切内置解读";
+}
+function renderEngineSwitch(){
+  return "<span style=\"font-size:12px;color:#a2937a\">解读引擎：</span>"+
+    "<button class=\"engine-btn on\" data-mode=\"cloud\" onclick=\"toggleEngine()\">⚡ 智能解读</button> "+
+    "<span id=\"engineState\" style=\"font-size:11.5px;color:#a2937a;margin-left:6px\">在线优先，失败自动切内置解读（保证有答案）</span>";
 }
 
 /* 引擎切换 */
@@ -955,7 +972,7 @@ async function aiLiuyao(){
     `${l.idx}爻：${l.liuShen} ${l.zhi}${l.qin}${l.shi?'（世）':''}${l.ying?'（应）':''}${l.bian?'（动）':''}`
   ).join('、');
   const system=`你是六爻解卦师傅（京房纳甲+增删卜易）。把卦象当整体读，世应、动变、变卦融合判断。说话像朋友聊天：白话、口语、无AI腔、无老人腔、不用编号分点。回答结构：先一句话点破格局→直接回答所问→一句心理剖析→一句可行建议。全文150~200字，绝不超过250字。不贩卖焦虑。`
-  await deepAsk(system, user, box, "☯", "师傅断卦", "aiLiuyao");
+  await deepAsk(system, user, box, "☯", "师傅断卦", "aiLiuyao", "yao");
 }
 const GUA_WORDS={
 '乾为天':['元亨利贞。','自强不息，顺势而为，大有作为。'],'坤为地':['元亨，利牝马之贞。','厚德载物，以柔顺包容之心应对，诸事可成。'],
@@ -1108,7 +1125,7 @@ async function aiBazi(){
     `${p.name} ${p.gz}（纳音${p.nayin}，天干${p.ssGan}，地支${p.ssZhi}，藏干${zc(p.zhi).join('')}）`
   ).join('、');
   const system=`你是八字师傅（盲派为主、子平为辅）。综合论命局气象，不逐项罗列。说话像朋友聊天：白话、口语、无AI腔、不用编号分点。回答结构：先一句话定命局→直接回答所问→点一句大运流年关键→一句心理剖析→一句建议。全文150~200字，绝不超过250字。不吓人。`
-  await deepAsk(system, user, box, "📜", "师傅批命", "aiBazi");
+  await deepAsk(system, user, box, "📜", "师傅批命", "aiBazi", "bazi");
 }
 
 /* ============ 塔罗牌（深度解读） ============ */
@@ -1218,7 +1235,7 @@ async function aiTarot(){
   const desc=window._tarotDesc||'';
   const cardsInfo=lastTarotCards.map((c,i)=>`${['过去','现在','未来'][i]}：${c.name}（${c.upright?'正位':'逆位'}）`).join('，');
   const system=`你是塔罗解读师，懂心理。把三张牌（过去/现在/未来）当一条故事线整体读，不逐张拆解。说话像朋友聊天：白话、口语、无AI腔、不用编号分点。回答结构：先概括牌阵脉络→直接回答所问→一句心理剖析→一句可行建议。全文150~200字，绝不超过250字。不制造焦虑。`
-  await deepAsk(system, user, box, "🔮", "塔罗师解读", "aiTarot");
+  await deepAsk(system, user, box, "🔮", "塔罗师解读", "aiTarot", "tarot");
 }
 
 /* ============ 每日一签 ============ */
