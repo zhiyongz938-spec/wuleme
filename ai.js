@@ -11,7 +11,7 @@ async function aiAsk(system, user) {
       max_tokens: 350,
       thinking: { type: "disabled" },
     }),
-    signal: AbortSignal.timeout(8000),
+    signal: (function(){try{var c=new AbortController();setTimeout(function(){c.abort();},8000);return c.signal;}catch(e){return undefined;}})(),
   });
   const j = await r.json();
   if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
